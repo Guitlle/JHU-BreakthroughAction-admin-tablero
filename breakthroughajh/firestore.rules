@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedInActive() {
+      return request.auth.uid != null && request.auth.token.email_verified && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.active;
+    }
+    function isEditor() {
+      return "editor" in get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.roles  && request.auth.token.email_verified
+    }
+    function isAdmin() {
+      return "admin" in get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.roles && request.auth.token.email_verified
+    }
+
+    match /dbedits/{document} {
+      allow read: if signedInActive()
+      allow create: if (isEditor() || isAdmin())
+      allow update: if signedInActive() && (isAdmin() || resource.data.Autor == request.auth.token.email)
+      allow delete: if isAdmin()
+    }
+    match /dbrows/{document} {
+      allow read: if signedInActive()
+      allow write: if isAdmin()
+    }
+    match /users/{document} {
+      allow read: if isAdmin() || resource.id == request.auth.token.email
+      allow write: if isAdmin()
+    }
+  }
+}
