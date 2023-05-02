@@ -42,11 +42,6 @@ const usersCollection = buildCollection<User>({
           dataType: "boolean",
           name: "Active User"
         },
-        email: {
-          dataType: "string",
-          name: "email",
-          readOnly: true,
-        },
         roles: {
           dataType: "array",
           name: "Roles",

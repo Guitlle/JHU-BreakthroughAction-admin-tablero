@@ -14,12 +14,25 @@ import {
 } from "firecms";
 
 
-import rowsCollection from "./rows";
-import editsCollection from "./edits";
-import userCollection from "./users";
+import rowsCollection from "./collections/rows";
+import editsCollection from "./collections/edits";
+import userCollection from "./collections/users";
+import GSheetEmbed from "./views/sheet_view";
 
 import "typeface-rubik";
 import "@fontsource/ibm-plex-mono";
+import GetAccessTokenFromServiceAccount from  "./utils/auth";
+
+
+const views: CMSView[] = [
+    {
+        path: "db",
+        name: "Database",
+        description: "Database view",
+        view: <GSheetEmbed/>
+    }
+];
+
 
 export default function App() {
     const myAuthenticator: Authenticator<FirebaseUser> = useCallback(async ({
@@ -54,6 +67,7 @@ export default function App() {
         name={"Administración del Tablero"}
         authentication={myAuthenticator}
         collections={[rowsCollection, editsCollection, userCollection]}
+        views={views}
         firebaseConfig={firebaseConfig}
         signInOptions = {[
             GoogleAuthProvider.PROVIDER_ID,
