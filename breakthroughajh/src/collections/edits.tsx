@@ -1,6 +1,8 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import SendIcon from '@mui/icons-material/Send';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -16,12 +18,14 @@ import {
     PropertyPreviewProps,
     EntityCustomView,
     FieldDescription,
-    FieldProps
+    FieldProps,
+    useDataSource
 // @ts-ignore
 } from "firecms";
 
 import readCSV from "../utils/readcsv";
-
+import { exportConfig } from "../firebaseConfig";
+import { init, GSBatchUpdate, GSReadRange, GSAppendToRange } from "../utils/persistence.js";
 
 type BKJHDatabaseRow = {
     Nombre: string;
@@ -80,6 +84,7 @@ function CustomCSVField({
 
 function DataPreview({entity, modifiedValues})
 {
+  if (!entity || !entity.values.CSV) return <>...</>
   var data = readCSV(entity.values.CSV);
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(50);
@@ -141,11 +146,108 @@ function DataPreview({entity, modifiedValues})
   );
 }
 
-const schemaView: EntityCustomView = {
+const SchemaView: EntityCustomView = {
     path: "schemaview",
-    name: "Data preview",
+    name: "Datos Nuevos",
     Builder: ({collection, entity, modifiedValues}) => (
         <DataPreview entity={entity} modifiedValues={modifiedValues} />
+    )
+};
+
+var initialized = false;
+var MAXCOLS = 26;
+
+function ApprovePreview({entity, modifiedValues})
+{
+  var datasource = useDataSource();
+  if (!entity) return <>...</>
+  async function approve () {
+    if (!initialized) {
+      await init(exportConfig.private_key, exportConfig.client_email);
+      initialized = true;
+    }
+    var gsIdsResult = await GSReadRange(exportConfig.spreadsheetId, exportConfig.spreadsheetSheetName+"!A1:A20000");
+    var gs_ids= gsIdsResult.result.values.map((item) => item[0]);
+    if (entity.values.CSV) {
+      var data = readCSV(entity.values.CSV);
+      if (data.length > 1) {
+        var gs_cols = await GSReadRange(exportConfig.spreadsheetId, exportConfig.spreadsheetSheetName+"!A1:Z1");
+        var cols_ok = gs_cols.result.values.map((col, colix)=>col == data[0][colix] ).reduce((agg, value)=> (agg && value), true);
+        var error = false;
+        if (!cols_ok) {
+          error = "Error: Las columnas del CSV no coinciden con las columnas de la base de datos";
+        }
+        if (data[0][0] != "ID") {
+          error = "Error: la primera columna debe ser \"ID\"";
+        }
+        var last_row_ix = gs_ids.length;
+        var last_id_value = parseInt(last_row_ix > 1 ? gs_ids[last_row_ix-1] : 0);
+        if (!last_id_value)
+          last_id_value = last_row_ix;
+        for(var i=1; i<data.length; i++) {
+          data[i][0] = last_id_value+i;
+        }
+        data.splice(0,1);
+        let appendResult = await GSAppendToRange(
+            exportConfig.spreadsheetId,
+            exportConfig.spreadsheetSheetName+`!A${last_row_ix}:Z${last_row_ix}`,
+            data
+        );
+        console.log(appendResult);
+      }
+    }
+    if (entity.values.BorrarIDs && entity.values.BorrarIDs.length) {
+      var del_ids = entity.values.BorrarIDs.split("\n");
+      var emptyRow = [null];
+      for (var i=0; i<MAXCOLS;i++)
+        emptyRow.push("");
+      var updateData = del_ids.map((entityId) => {
+        let rangeRow = gs_ids.indexOf(entityId)+1;
+        if (rangeRow == 0)
+          return null;
+        let row = emptyRow.slice();
+        row[0] = entityId;
+        return {
+          range: `${exportConfig.spreadsheetSheetName}!A${rangeRow}`,
+          values: [row]
+        };
+      }).filter((value) => value !== null);
+      if (updateData.length > 0) {
+        var updateResult = await GSBatchUpdate(exportConfig.spreadsheetId, `${exportConfig.spreadsheetSheetName}!A1:Z1`, updateData);
+        console.log(updateResult);
+      }
+    }
+    entity.values.Aprobado = true;
+    datasource.saveEntity({path: entity.path, entityId: entity.id, values: entity.values, collection: editsCollection});
+  }
+
+  return (
+    <Paper>
+        {entity.values.Aprobado? (
+          <Box sx={{p: 4}}>
+            <h4>Este cambio ya fue aprobado e integrado en la base de datos.</h4>
+            <Button variant="contained" endIcon={<SendIcon />} disabled>
+              Continuar
+            </Button>
+          </Box>
+        ):(
+          <Box sx={{p: 4}}>
+            <h4>Aprobar e integrar cambios en la base de datos:</h4>
+            <Button variant="contained" endIcon={<SendIcon />} onClick={approve}>
+              Continuar
+            </Button>
+          </Box>
+        )}
+
+    </Paper>
+  );
+}
+
+const ApproveView: EntityCustomView = {
+    path: "approve",
+    name: "Aprobar",
+    Builder: ({collection, entity, modifiedValues}) => (
+        <ApprovePreview entity={entity} modifiedValues={modifiedValues} />
     )
 };
 
@@ -155,7 +257,8 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
     singularName: "Edit",
     path: "dbedits",
     views: [
-        schemaView
+        SchemaView,
+        ApproveView
     ],
     permissions: ({
                       entity,
@@ -187,7 +290,6 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
         },
         Autor: {
             name: "Email del autor",
-            validation: { required: true },
             dataType: "string"
         },
         Fecha: {
@@ -212,11 +314,6 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
         Aprobado: {
             dataType: "boolean",
             name: "Edición Aprobada",
-            readOnly: false
-        },
-        Integrado: {
-            dataType: "boolean",
-            name: "Edición Integrada",
             readOnly: true
         }
     }

@@ -34,7 +34,7 @@ const usersCollection = buildCollection<User>({
             delete: isAdmin
         });
     },
-    icon: "User",
+    icon: "AccountCircle",
     inlineEditing: false,
     customId: true,
     properties: {

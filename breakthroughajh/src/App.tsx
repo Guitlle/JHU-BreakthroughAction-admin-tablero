@@ -9,12 +9,13 @@ import { GoogleAuthProvider } from "firebase/auth";
 import {
     Authenticator,
     FirebaseCMSApp,
-    useCollectionFetch
+    useCollectionFetch,
+    CMSView
 // @ts-ignore
 } from "firecms";
 
 
-import rowsCollection from "./collections/rows";
+
 import editsCollection from "./collections/edits";
 import userCollection from "./collections/users";
 import GSheetEmbed from "./views/sheet_view";
@@ -29,7 +30,8 @@ const views: CMSView[] = [
         path: "db",
         name: "Database",
         description: "Database view",
-        view: <GSheetEmbed/>
+        view: <GSheetEmbed/>,
+        icon: "Dataset"
     }
 ];
 
@@ -66,7 +68,7 @@ export default function App() {
         logo="/logo.png"
         name={"Administración del Tablero"}
         authentication={myAuthenticator}
-        collections={[rowsCollection, editsCollection, userCollection]}
+        collections={[editsCollection, userCollection]}
         views={views}
         firebaseConfig={firebaseConfig}
         signInOptions = {[
