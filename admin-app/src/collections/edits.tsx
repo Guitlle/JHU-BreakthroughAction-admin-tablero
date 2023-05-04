@@ -340,7 +340,7 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
         Aprobado: {
             dataType: "boolean",
             name: "Edición Aprobada",
-            readOnly: false
+            readOnly: true
         }
     }
 });
