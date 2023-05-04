@@ -19,9 +19,12 @@ import {
     EntityCustomView,
     FieldDescription,
     FieldProps,
-    useDataSource
+    useDataSource,
+    useSideEntityController
 // @ts-ignore
 } from "firecms";
+
+import { getStorage, ref, uploadString } from "firebase/storage";
 
 import readCSV from "../utils/readcsv";
 import { exportConfig } from "../firebaseConfig";
@@ -159,38 +162,46 @@ var MAXCOLS = 26;
 
 function ApprovePreview({entity, modifiedValues})
 {
-  var datasource = useDataSource();
+  const datasource = useDataSource();
+  const sideEntityController = useSideEntityController();
+
   if (!entity) return <>...</>
   async function approve () {
     if (!initialized) {
       await init(exportConfig.private_key, exportConfig.client_email);
       initialized = true;
     }
-    var gsIdsResult = await GSReadRange(exportConfig.spreadsheetId, exportConfig.spreadsheetSheetName+"!A1:A20000");
-    var gs_ids= gsIdsResult.result.values.map((item) => item[0]);
+    var storedDataResult = await GSReadRange(exportConfig.spreadsheetId, exportConfig.spreadsheetSheetName+"!A1:Z20000");
+    var storedData = storedDataResult.result.values;
     if (entity.values.CSV) {
       var data = readCSV(entity.values.CSV);
       if (data.length > 1) {
-        var gs_cols = await GSReadRange(exportConfig.spreadsheetId, exportConfig.spreadsheetSheetName+"!A1:Z1");
-        var cols_ok = gs_cols.result.values.map((col, colix)=>col == data[0][colix] ).reduce((agg, value)=> (agg && value), true);
-        var error = false;
+        var gs_cols = storedData[0];
+        var cols_ok = gs_cols.map(
+            (col, colix)=> (col && data[0][colix])? col == data[0][colix] : true
+        ).reduce((agg, value)=> (agg && value), true);
+        var error = "";
         if (!cols_ok) {
           error = "Error: Las columnas del CSV no coinciden con las columnas de la base de datos";
         }
         if (data[0][0] != "ID") {
           error = "Error: la primera columna debe ser \"ID\"";
         }
-        var last_row_ix = gs_ids.length;
-        var last_id_value = parseInt(last_row_ix > 1 ? gs_ids[last_row_ix-1] : 0);
+        if (error.length > 0) {
+          alert(error);
+          return;
+        }
+        var last_row_ix = storedData.length;
+        var last_id_value = parseInt(last_row_ix > 1 ? storedData[last_row_ix-1][0] : 0);
         if (!last_id_value)
           last_id_value = last_row_ix;
         for(var i=1; i<data.length; i++) {
           data[i][0] = last_id_value+i;
         }
-        data.splice(0,1);
+        data.splice(0,1); // remove header
         let appendResult = await GSAppendToRange(
             exportConfig.spreadsheetId,
-            exportConfig.spreadsheetSheetName+`!A${last_row_ix}:Z${last_row_ix}`,
+            exportConfig.spreadsheetSheetName+`!A1:S${last_row_ix+1}`,
             data
         );
         console.log(appendResult);
@@ -199,6 +210,7 @@ function ApprovePreview({entity, modifiedValues})
     if (entity.values.BorrarIDs && entity.values.BorrarIDs.length) {
       var del_ids = entity.values.BorrarIDs.split("\n");
       var emptyRow = [null];
+      var gs_ids = storedData.map((row) => row[0]); // the ID is the first column
       for (var i=0; i<MAXCOLS;i++)
         emptyRow.push("");
       var updateData = del_ids.map((entityId) => {
@@ -217,8 +229,20 @@ function ApprovePreview({entity, modifiedValues})
         console.log(updateResult);
       }
     }
+
     entity.values.Aprobado = true;
     datasource.saveEntity({path: entity.path, entityId: entity.id, values: entity.values, collection: editsCollection});
+    sideEntityController.close();
+    // backups
+    const storage = getStorage();
+    const backupContent = storedData.map((row) => {
+      return row.map((cell) => `"${cell}"`).join(",");
+    }).join("\n");
+    const backupName = new Date().toISOString() + "__pre_" + entity.id + ".csv"
+    const backupFileRef = ref(storage, 'db/backups/' + backupName);
+    uploadString(backupFileRef, backupContent).then((snapshot) => {
+      console.log('Uploaded backup');
+    });
   }
 
   return (
@@ -296,7 +320,9 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
             name: "Fecha",
             validation: { required: true },
             dataType: "date",
-            mode: "date"
+            mode: "date",
+            autoValue: "on_create",
+            readOnly: true
         },
         CSV: buildProperty({
             name: "Datos (CSV)",
@@ -314,7 +340,7 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
         Aprobado: {
             dataType: "boolean",
             name: "Edición Aprobada",
-            readOnly: true
+            readOnly: false
         }
     }
 });

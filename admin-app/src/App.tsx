@@ -1,5 +1,5 @@
 // @ts-ignore
-import firebaseConfig from "./firebaseConfig";
+import { default as firebaseConfig, exportConfig } from "./firebaseConfig";
 
 import { useCallback, useEffect } from "react";
 
@@ -19,19 +19,32 @@ import {
 import editsCollection from "./collections/edits";
 import userCollection from "./collections/users";
 import GSheetEmbed from "./views/sheet_view";
+import BackupsView from "./views/backups";
 
 import "typeface-rubik";
 import "@fontsource/ibm-plex-mono";
 import GetAccessTokenFromServiceAccount from  "./utils/auth";
 
 
+function Tablero() {
+    return (
+        <iframe style={{width: "100%", height: "90vh"}} src={exportConfig.embeddedDashboard} frameBorder="0"></iframe>
+    );
+}
+
+
 const views: CMSView[] = [
     {
-        path: "db",
-        name: "Database",
-        description: "Database view",
-        view: <GSheetEmbed/>,
-        icon: "Dataset"
+        path: "tablero",
+        name: "Ver Tablero",
+        view: <Tablero/>,
+        icon: "Preview"
+    },
+    {
+        path: "backups",
+        name: "Backups",
+        view: <BackupsView/>,
+        icon: "CloudDownload"
     }
 ];
 

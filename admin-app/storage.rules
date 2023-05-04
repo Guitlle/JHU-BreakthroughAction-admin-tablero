@@ -1,13 +1,13 @@
 rules_version = '2';
 service firebase.storage {
   function signedInActive() {
-    return request.auth.uid != null && request.auth.token.email_verified && get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.active;
+    return request.auth.uid != null && request.auth.token.email_verified && firestore.get(/databases/(default)/documents/users/$(request.auth.token.email)).data.active;
   }
   function isEditor() {
-    return "editor" in get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.roles  && request.auth.token.email_verified
+    return "editor" in firestore.get(/databases/(default)/documents/users/$(request.auth.token.email)).data.roles  && request.auth.token.email_verified
   }
   function isAdmin() {
-    return "admin" in get(/databases/$(database)/documents/users/$(request.auth.token.email)).data.roles && request.auth.token.email_verified
+    return "admin" in firestore.get(/databases/(default)/documents/users/$(request.auth.token.email)).data.roles && request.auth.token.email_verified
   }
   match /b/{bucket}/o {
     match /{allPaths=**} {
