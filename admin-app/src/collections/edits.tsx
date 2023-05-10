@@ -318,11 +318,9 @@ const editsCollection = buildCollection<BKJHDatabaseRow>({
         },
         Fecha: {
             name: "Fecha",
-            validation: { required: true },
+            validation: { required: false},
             dataType: "date",
-            mode: "date",
-            autoValue: "on_create",
-            readOnly: true
+            mode: "date"
         },
         CSV: buildProperty({
             name: "Datos (CSV)",
